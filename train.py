@@ -225,6 +225,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     progress_bar.close()
 
                 # Log and save
+                save_flag = False
                 test_psnr = training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), loss_dict)
                 if (iteration in testing_iterations):
                     if test_psnr >= best_psnr:
@@ -232,6 +233,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                         print("\n[ITER {}] Saving best checkpoint".format(iteration))
                         torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt_best.pth")
                         torch.save((tgh.capture(gaussians), iteration), scene.model_path + "/tgh_chkpnt_best.pth")
+                        save_flag = True
                         
                 if (iteration in saving_iterations):
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
@@ -261,11 +263,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     if pipe.env_map_res and iteration < pipe.env_optimize_until:
                         env_map_optimizer.step()
                         env_map_optimizer.zero_grad(set_to_none = True)
-            if gaussian_init_flag:
-                scene.tgh.update_from_gaussians(gaussians, opt)
-            else:
-                scene.tgh.create_from_gaussians(gaussians, opt)
-                gaussian_init_flag = True
+
+                if gaussian_init_flag:
+                    scene.tgh.update_from_gaussians(gaussians, opt)
+                else:
+                    scene.tgh.create_from_gaussians(gaussians, opt)
+                    gaussian_init_flag = True
+                if save_flag:
+                    torch.save((tgh.capture(gaussians), iteration), scene.model_path + "/tgh_chkpnt_best_after_prune.pth")
             #scene.tgh.update_from_gaussians(gaussians, opt)
 
 def prepare_output_and_logger(args):    

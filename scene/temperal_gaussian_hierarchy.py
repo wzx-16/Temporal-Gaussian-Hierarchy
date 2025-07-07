@@ -114,13 +114,17 @@ class TemperalGaussianHierarchy():
         xyz_gradient_accum = self.layers[0][0].xyz_gradient_accum
         t_gradient_accum = self.layers[0][0].t_gradient_accum
         denom = self.layers[0][0].denom
-        opt_states = self.layers[0][0].opt_states
+        opt_states = {}
+        opt_states.update(self.layers[0][0].opt_states)
         spatial_lr_scale = gaussians.spatial_lr_scale
         _t = self.layers[0][0]._t
         _scaling_t = self.layers[0][0]._scaling_t
         _rotation_r = self.layers[0][0]._rotation_r
         rot_4d = gaussians.rot_4d
-        env_map = gaussians.env_map
+        if gaussians.env_map is not None:
+            env_map = gaussians.env_map.cpu()
+        else:
+            env_map = None
         active_sh_degree_t = gaussians.active_sh_degree_t
         for level in range(1, self.level_count + 1):
             current_length = self.max_layer_length / 2**(level - 1)
