@@ -16,7 +16,7 @@ from torch import nn
 from utils.loss_utils import l1_loss, ssim, msssim
 from gaussian_renderer import render
 import sys
-from scene import Scene, GaussianModel
+from scene import Scene, GaussianModel, TemperalGaussianHierarchy
 from utils.general_utils import safe_state, knn
 import uuid
 from tqdm import tqdm
@@ -42,8 +42,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
+    tgh = TemperalGaussianHierarchy(dataset.sh_degree, 9, 10,  gaussian_dim=gaussian_dim, time_duration=time_duration, rot_4d=rot_4d, force_sh_3d=force_sh_3d, sh_degree_t=2 if pipe.eval_shfs_4d else 0)
     gaussians = GaussianModel(dataset.sh_degree, gaussian_dim=gaussian_dim, time_duration=time_duration, rot_4d=rot_4d, force_sh_3d=force_sh_3d, sh_degree_t=2 if pipe.eval_shfs_4d else 0)
-    scene = Scene(dataset, gaussians, num_pts=num_pts, num_pts_ratio=num_pts_ratio, time_duration=time_duration)
+    scene = Scene(dataset, gaussians, tgh, num_pts=num_pts, num_pts_ratio=num_pts_ratio, time_duration=time_duration)
     gaussians.training_setup(opt)
     
     if checkpoint:
@@ -74,7 +75,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         env_map = None
         
     gaussians.env_map = env_map
-        
+
+    #scene.tgh.create_from_gaussians(gaussians, opt)
+    gaussian_init_flag = False
     training_dataset = scene.getTrainCameras()
     training_dataloader = DataLoader(training_dataset, batch_size=batch_size, shuffle=True, num_workers=12 if dataset.dataloader else 0, collate_fn=lambda x: x, drop_last=True)
      
@@ -102,6 +105,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             
             for batch_idx in range(batch_size):
                 gt_image, viewpoint_cam = batch_data[batch_idx]
+                #gaussians.set_current_timestamp(viewpoint_cam.timestamp)
+                if gaussian_init_flag:
+                    scene.tgh.put_current_related_gaussians(viewpoint_cam.timestamp, gaussians)
+                else:
+                    gaussians.set_current_timestamp(viewpoint_cam.timestamp)
                 gt_image = gt_image.cuda()
                 viewpoint_cam = viewpoint_cam.cuda()
 
@@ -164,6 +172,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 batch_radii.append(radii)
                 batch_visibility_filter.append(visibility_filter)
 
+                #scene.tgh.update_from_gaussians(gaussians, opt)
+
             if batch_size > 1:
                 visibility_count = torch.stack(batch_visibility_filter,1).sum(1)
                 visibility_filter = visibility_count > 0
@@ -221,10 +231,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                         best_psnr = test_psnr
                         print("\n[ITER {}] Saving best checkpoint".format(iteration))
                         torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt_best.pth")
+                        torch.save((tgh.capture(gaussians), iteration), scene.model_path + "/tgh_chkpnt_best.pth")
                         
                 if (iteration in saving_iterations):
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
+
 
                 # Densification
                 if iteration < opt.densify_until_iter and (opt.densify_until_num_points < 0 or gaussians.get_xyz.shape[0] < opt.densify_until_num_points):
@@ -249,6 +261,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     if pipe.env_map_res and iteration < pipe.env_optimize_until:
                         env_map_optimizer.step()
                         env_map_optimizer.zero_grad(set_to_none = True)
+            if gaussian_init_flag:
+                scene.tgh.update_from_gaussians(gaussians, opt)
+            else:
+                scene.tgh.create_from_gaussians(gaussians, opt)
+                gaussian_init_flag = True
+            #scene.tgh.update_from_gaussians(gaussians, opt)
 
 def prepare_output_and_logger(args):    
     if not args.model_path:

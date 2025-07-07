@@ -16,6 +16,7 @@ import json
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
+from scene.temperal_gaussian_hierarchy import TemperalGaussianHierarchy
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 from utils.data_utils import CameraDataset
@@ -23,14 +24,16 @@ from utils.data_utils import CameraDataset
 class Scene:
 
     gaussians : GaussianModel
+    tgh : TemperalGaussianHierarchy
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], num_pts=100_000, num_pts_ratio=1.0, time_duration=None):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, tgh : TemperalGaussianHierarchy, load_iteration=None, shuffle=True, resolution_scales=[1.0], num_pts=100_000, num_pts_ratio=1.0, time_duration=None):
         """b
         :param path: Path to colmap scene main folder.
         """
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
+        self.tgh = tgh
         self.white_background = args.white_background
 
         if load_iteration:
@@ -78,8 +81,8 @@ class Scene:
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
             
         if args.loaded_pth:
-            self.gaussians.create_from_pth(args.loaded_pth, self.cameras_extent)
-            #self.gaussians.restore(model_args=torch.load(args.loaded_pth)[0], training_args=None)
+            #self.gaussians.create_from_pth(args.loaded_pth, self.cameras_extent)
+            self.gaussians.restore(model_args=torch.load(args.loaded_pth, map_location="cuda:0")[0], training_args=None)
         else:
             if self.loaded_iter:
                 self.gaussians.load_ply(os.path.join(self.model_path,
@@ -88,6 +91,7 @@ class Scene:
                                                             "point_cloud.ply"))
             else:
                 self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+                #self.tgh.create_from_gaussians(self.gaussians)
 
     def save(self, iteration):
         torch.save((self.gaussians.capture(), iteration), self.model_path + "/chkpnt" + str(iteration) + ".pth")
