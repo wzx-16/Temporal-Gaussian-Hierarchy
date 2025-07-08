@@ -2,6 +2,7 @@ import math
 from scene.gaussian_segment import GaussianSegment
 from scene.gaussian_model import GaussianModel
 import torch
+import time
 
 class TemperalGaussianHierarchy():
 
@@ -73,14 +74,26 @@ class TemperalGaussianHierarchy():
             replace_ind = 0 if level == 1 else math.floor(gaussians.current_timestamp / last_layer_length)
 
             for ind in range(last_segment_count):
+                #mask_compute_start1 = time.time()
+                actual_mask = mask & (gaussians_level_start != gaussians_level_end) & (ind == gaussians_last_level_ind)
+                #mask_compute_end1 = time.time()
+                #torch.cuda.synchronize()
+                #print(f"mask compute time1: {mask_compute_end1 - mask_compute_start1:.6f} seconds")
+                #mem_copy_start = time.time()
                 if ind == replace_ind:
-                    self.layers[level - 1][ind].clone_by_mask(mask & (gaussians_level_start != gaussians_level_end) & (ind == gaussians_last_level_ind), gaussians, opt)
+                    self.layers[level - 1][ind].clone_by_mask(actual_mask, gaussians, opt)
                 else:
-                    self.layers[level - 1][ind].append_from_gaussians_gpu(mask & (gaussians_level_start != gaussians_level_end) & (ind == gaussians_last_level_ind), gaussians)
+                    self.layers[level - 1][ind].append_from_gaussians_gpu(actual_mask, gaussians)
+                #mem_copy_end = time.time()
+                #torch.cuda.synchronize()
+                #print(f"memory copy time: {mem_copy_end - mem_copy_start:.6f} seconds")
                 #print("test")
-            
+            #mask_compute_start2 = time.time()
             #mask = ~mask
             mask = (mask & (gaussians_level_start == gaussians_level_end))
+            #mask_compute_end2 = time.time()
+            #torch.cuda.synchronize()
+            #print(f"mask compute time2: {mask_compute_end2 - mask_compute_start2:.6f} seconds")
 
             if level == self.level_count:
                 for ind in range(math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length)):
@@ -92,15 +105,20 @@ class TemperalGaussianHierarchy():
 
     def put_current_related_gaussians(self, timestamp : float, gaussians : "GaussianModel"):
         gaussians.set_current_timestamp(timestamp)
-        state_dict = self.layers[0][0].clone_to(gaussians)
+        state_dict = gaussians.get_state_dict()
+        #state_dict = self.layers[0][0].clone_to(gaussians)
+        gaussians_segments = [self.layers[0][0]]
         for level in range(1, self.level_count + 1):
             current_ind = math.floor(timestamp / (self.max_layer_length / 2**(level - 1)))
-            gaussians.append_from_gaussians_cpu(self.layers[level][current_ind])
+            gaussians_segments.append(self.layers[level][current_ind])
+            #gaussians.append_from_gaussians_cpu(self.layers[level][current_ind])
+        gaussians.clone_from_cpu(gaussians_segments)
         gaussians.reset_param_groups()
-        gaussians.append_state_from_gaussian_cpu(self.layers[0][0], state_dict)
-        for level in range(1, self.level_count + 1):
-            current_ind = math.floor(timestamp / (self.max_layer_length / 2**(level - 1)))
-            gaussians.append_state_from_gaussian_cpu(self.layers[level][current_ind], None)
+        gaussians.clone_state_from_gaussians_cpu(gaussians_segments, state_dict)
+        # gaussians.append_state_from_gaussian_cpu(self.layers[0][0], state_dict)
+        # for level in range(1, self.level_count + 1):
+        #     current_ind = math.floor(timestamp / (self.max_layer_length / 2**(level - 1)))
+        #     gaussians.append_state_from_gaussian_cpu(self.layers[level][current_ind], None)
         torch.cuda.empty_cache()
 
     def capture(self, gaussians : GaussianModel):

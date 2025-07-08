@@ -28,6 +28,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from torch.utils.data import DataLoader
+import time
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -103,26 +104,34 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             batch_visibility_filter = []
             batch_radii = []
             
+            #start_t = time.time()
             for batch_idx in range(batch_size):
                 gt_image, viewpoint_cam = batch_data[batch_idx]
                 #gaussians.set_current_timestamp(viewpoint_cam.timestamp)
                 if gaussian_init_flag:
+                    #cpu_to_cuda_start = time.time()
                     scene.tgh.put_current_related_gaussians(viewpoint_cam.timestamp, gaussians)
+                    #torch.cuda.synchronize()
+                    #cpu_to_cuda_end = time.time()
+                    #print(f" cpu to cuda time: {cpu_to_cuda_end - cpu_to_cuda_start:.6f} seconds")
                 else:
                     gaussians.set_current_timestamp(viewpoint_cam.timestamp)
                 gt_image = gt_image.cuda()
                 viewpoint_cam = viewpoint_cam.cuda()
-
+                #render_start = time.time()
                 render_pkg = render(viewpoint_cam, gaussians, pipe, background)
+                #torch.cuda.synchronize()
+                #render_end = time.time()
+                #print(f"render time: {render_end - render_start:.6f} seconds")
                 image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
                 depth = render_pkg["depth"]
                 alpha = render_pkg["alpha"]
-
+                #loss_start = time.time()
                 # Loss
                 Ll1 = l1_loss(image, gt_image)
                 Lssim = 1.0 - ssim(image, gt_image)
                 loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim
-                
+
                 ###### opa mask Loss ######
                 if opt.lambda_opa_mask > 0:
                     o = alpha.clamp(1e-6, 1-1e-6)
@@ -171,7 +180,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 batch_point_grad.append(torch.norm(viewspace_point_tensor.grad[:,:2], dim=-1))
                 batch_radii.append(radii)
                 batch_visibility_filter.append(visibility_filter)
-
+                #loss_end = time.time()
+                #torch.cuda.synchronize()
+                #print(f"loss compute time: {loss_end - loss_start:.6f} seconds")
                 #scene.tgh.update_from_gaussians(gaussians, opt)
 
             if batch_size > 1:
@@ -194,8 +205,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             iter_end.record()
             loss_dict = {"Ll1": Ll1,
                         "Lssim": Lssim}
-
+            
             with torch.no_grad():
+                #optimizer_start = time.time()
                 psnr_for_log = psnr(image, gt_image).mean().double()
                 # Progress bar
                 ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
@@ -263,7 +275,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     if pipe.env_map_res and iteration < pipe.env_optimize_until:
                         env_map_optimizer.step()
                         env_map_optimizer.zero_grad(set_to_none = True)
-
+                #optimizer_end = time.time()
+                #torch.cuda.synchronize()
+                #print(f"optimizer step time: {optimizer_end - optimizer_start:.6f} seconds")
+                #cuda_to_cpu_start = time.time()
                 if gaussian_init_flag:
                     scene.tgh.update_from_gaussians(gaussians, opt)
                 else:
@@ -271,7 +286,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     gaussian_init_flag = True
                 if save_flag:
                     torch.save((tgh.capture(gaussians), iteration), scene.model_path + "/tgh_chkpnt_best_after_prune.pth")
+                #cuda_to_cpu_end = time.time()
+                #torch.cuda.synchronize()
+                #print(f"cuda to cpu time: {cuda_to_cpu_end - cuda_to_cpu_start:.6f} seconds")
             #scene.tgh.update_from_gaussians(gaussians, opt)
+            #torch.cuda.synchronize()
+            #end_t = time.time()
+            #print(f"total iter time: {end_t - start_t:.6f} seconds")
 
 def prepare_output_and_logger(args):    
     if not args.model_path:
