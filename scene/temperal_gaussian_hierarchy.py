@@ -101,6 +101,7 @@ class TemperalGaussianHierarchy():
         for level in range(1, self.level_count + 1):
             current_ind = math.floor(timestamp / (self.max_layer_length / 2**(level - 1)))
             gaussians.append_state_from_gaussian_cpu(self.layers[level][current_ind], None)
+        torch.cuda.empty_cache()
 
     def capture(self, gaussians : GaussianModel):
         active_sh_degree = gaussians.active_sh_degree
