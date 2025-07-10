@@ -244,7 +244,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                         best_psnr = test_psnr
                         print("\n[ITER {}] Saving best checkpoint".format(iteration))
                         torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt_best.pth")
-                        torch.save((tgh.capture(gaussians), iteration), scene.model_path + "/tgh_chkpnt_best.pth")
+                        torch.save((tgh.capture(gaussians, opt), iteration), scene.model_path + "/tgh_chkpnt_best.pth")
                         save_flag = True
                         
                 if (iteration in saving_iterations):
@@ -280,12 +280,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 #print(f"optimizer step time: {optimizer_end - optimizer_start:.6f} seconds")
                 #cuda_to_cpu_start = time.time()
                 if gaussian_init_flag:
-                    scene.tgh.update_from_gaussians(gaussians, opt)
+                    scene.tgh.update_from_gaussians(gaussians, opt, None)
                 else:
                     scene.tgh.create_from_gaussians(gaussians, opt)
                     gaussian_init_flag = True
-                if save_flag:
-                    torch.save((tgh.capture(gaussians), iteration), scene.model_path + "/tgh_chkpnt_best_after_prune.pth")
+                # if save_flag:
+                    #torch.save((tgh.capture(gaussians), iteration), scene.model_path + "/tgh_chkpnt_best_after_prune.pth")
                 #cuda_to_cpu_end = time.time()
                 #torch.cuda.synchronize()
                 #print(f"cuda to cpu time: {cuda_to_cpu_end - cuda_to_cpu_start:.6f} seconds")

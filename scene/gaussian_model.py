@@ -182,50 +182,103 @@ class GaussianModel:
             self.denom = denom
             self.optimizer.load_state_dict(opt_dict)
 
-    def clone_by_mask(self, mask : torch.Tensor, gaussians : "GaussianModel", opt):
+    def clone_by_mask(self, mask : torch.Tensor, gaussians : "GaussianModel", opt, new_gaussians : "GaussianModel"):
        #new_gaussian = GaussianModel(self.sh_degree, self.gaussian_dim, self.time_duration, self.rot_4d, self.force_sh_3d, self.sh_degree_t)
         # new_gaussian.restore([self.active_sh_degree, self._xyz[mask], self._features_dc[mask], self._features_rest[mask], self._scaling[mask], self._rotation[mask],
         #                     self._opacity[mask], self.max_radii2D[mask], self.xyz_gradient_accum[mask], self.t_gradient_accum[mask], self.denom[mask],
         #                     self.spatial_lr_scale[mask], self._t[mask], self._scaling_t[mask], self._rotation_r[mask], self.rot_4d, self.env_map[mask], self.active_sh_degree_t], None)
         #new_gaussian.active_sh_degree = self.active_sh_degree
-        self._xyz = gaussians._xyz[mask].cpu()
-        self._features_dc = gaussians._features_dc[mask].cpu()
-        self._features_rest = gaussians._features_rest[mask].cpu()
-        self._scaling = gaussians._scaling[mask].cpu()
-        self._rotation = gaussians._rotation[mask].cpu()
-        self._opacity = gaussians._opacity[mask].cpu()
-        self.max_radii2D = gaussians.max_radii2D[mask].cpu()
-        self.xyz_gradient_accum = gaussians.xyz_gradient_accum[mask].cpu()
-        self.t_gradient_accum = gaussians.t_gradient_accum[mask].cpu()
-        self.denom = gaussians.denom[mask].cpu()
-        #self.spatial_lr_scale = gaussians.spatial_lr_scale[mask].cpu()
-        self._t = gaussians._t[mask].cpu()
-        self._scaling_t = gaussians._scaling_t[mask].cpu()
-        self._rotation_r = gaussians._rotation_r[mask].cpu()
+        if new_gaussians is None:
+            self._xyz = gaussians._xyz[mask].cpu()
+            self._features_dc = gaussians._features_dc[mask].cpu()
+            self._features_rest = gaussians._features_rest[mask].cpu()
+            self._scaling = gaussians._scaling[mask].cpu()
+            self._rotation = gaussians._rotation[mask].cpu()
+            self._opacity = gaussians._opacity[mask].cpu()
+            self.max_radii2D = gaussians.max_radii2D[mask].cpu()
+            self.xyz_gradient_accum = gaussians.xyz_gradient_accum[mask].cpu()
+            self.t_gradient_accum = gaussians.t_gradient_accum[mask].cpu()
+            self.denom = gaussians.denom[mask].cpu()
+            #self.spatial_lr_scale = gaussians.spatial_lr_scale[mask].cpu()
+            self._t = gaussians._t[mask].cpu()
+            self._scaling_t = gaussians._scaling_t[mask].cpu()
+            self._rotation_r = gaussians._rotation_r[mask].cpu()
 
-        self.rot_4d = gaussians.rot_4d
-        # if gaussians.env_map is not None:
-        #     self.env_map = gaussians.env_map[mask].cpu()
-        #new_gaussian.active_sh_degree_t = self.active_sh_degree_t
-        #new_gaussian.percent_dense = self.percent_dense
-        #new_gaussian.optimizer = self.optimizer
-        #new_gaussian.max_sh_degree = self.max_sh_degree
-        self.gaussian_dim = gaussians.gaussian_dim
-        self.time_duration = gaussians.time_duration
-        self.force_sh_3d = gaussians.force_sh_3d
-        self.max_sh_degree_t = gaussians.max_sh_degree_t
-        #self.training_setup(opt)
-        #new_gaussian.setup_functions()
-        self.opt_states.clear()
-        for group in gaussians.optimizer.param_groups:
-            optimizer_state = gaussians.optimizer.state.get(group["params"][0], None)
-            #attr = self.get_param_group_corresponding_attr(group["name"])
-            if optimizer_state is not None and len(optimizer_state) != 0:
-                state_content = {}
-                state_content["step"] = optimizer_state["step"].cpu()
-                state_content["exp_avg"] = optimizer_state["exp_avg"][mask].cpu()
-                state_content["exp_avg_sq"] = optimizer_state["exp_avg_sq"][mask].cpu()
-                self.opt_states[group["name"]] = state_content
+            self.rot_4d = gaussians.rot_4d
+            # if gaussians.env_map is not None:
+            #     self.env_map = gaussians.env_map[mask].cpu()
+            #new_gaussian.active_sh_degree_t = self.active_sh_degree_t
+            #new_gaussian.percent_dense = self.percent_dense
+            #new_gaussian.optimizer = self.optimizer
+            #new_gaussian.max_sh_degree = self.max_sh_degree
+            self.gaussian_dim = gaussians.gaussian_dim
+            self.time_duration = gaussians.time_duration
+            self.force_sh_3d = gaussians.force_sh_3d
+            self.max_sh_degree_t = gaussians.max_sh_degree_t
+            #self.training_setup(opt)
+            #new_gaussian.setup_functions()
+            self.opt_states.clear()
+            for group in gaussians.optimizer.param_groups:
+                optimizer_state = gaussians.optimizer.state.get(group["params"][0], None)
+                #attr = self.get_param_group_corresponding_attr(group["name"])
+                if optimizer_state is not None and len(optimizer_state) != 0:
+                    state_content = {}
+                    state_content["step"] = optimizer_state["step"].cpu()
+                    state_content["exp_avg"] = optimizer_state["exp_avg"][mask].cpu()
+                    state_content["exp_avg_sq"] = optimizer_state["exp_avg_sq"][mask].cpu()
+                    self.opt_states[group["name"]] = state_content
+        else:
+
+            new_gaussians._xyz = torch.cat([new_gaussians._xyz, gaussians._xyz[mask].cpu()])
+            new_gaussians._features_dc = torch.cat([new_gaussians._features_dc, gaussians._features_dc[mask].cpu()])
+            new_gaussians._features_rest = torch.cat([new_gaussians._features_rest, gaussians._features_rest[mask].cpu()])
+            new_gaussians._scaling = torch.cat([new_gaussians._scaling, gaussians._scaling[mask].cpu()])
+            new_gaussians._rotation = torch.cat([new_gaussians._rotation, gaussians._rotation[mask].cpu()])
+            new_gaussians._opacity = torch.cat([new_gaussians._opacity, gaussians._opacity[mask].cpu()])
+            new_gaussians.max_radii2D = torch.cat([new_gaussians.max_radii2D, gaussians.max_radii2D[mask].cpu()])
+            new_gaussians.xyz_gradient_accum = torch.cat([new_gaussians.xyz_gradient_accum, gaussians.xyz_gradient_accum[mask].cpu()])
+            new_gaussians.t_gradient_accum = torch.cat([new_gaussians.t_gradient_accum, gaussians.t_gradient_accum[mask].cpu()])
+            new_gaussians.denom = torch.cat([new_gaussians.denom, gaussians.denom[mask].cpu()])
+            #self.spatial_lr_scale = torch.cat([self.spatial_lr_scale, gaussians.spatial_lr_scale[mask]]).cpu()
+            new_gaussians._t = torch.cat([new_gaussians._t, gaussians._t[mask].cpu()])
+            new_gaussians._scaling_t = torch.cat([new_gaussians._scaling_t, gaussians._scaling_t[mask].cpu()])
+            new_gaussians._rotation_r = torch.cat([new_gaussians._rotation_r, gaussians._rotation_r[mask].cpu()])
+
+            # new_gaussians._xyz = gaussians._xyz[mask].cpu()
+            # new_gaussians._features_dc = gaussians._features_dc[mask].cpu()
+            # new_gaussians._features_rest = gaussians._features_rest[mask].cpu()
+            # new_gaussians._scaling = gaussians._scaling[mask].cpu()
+            # new_gaussians._rotation = gaussians._rotation[mask].cpu()
+            # new_gaussians._opacity = gaussians._opacity[mask].cpu()
+            # new_gaussians.max_radii2D = gaussians.max_radii2D[mask].cpu()
+            # new_gaussians.xyz_gradient_accum = gaussians.xyz_gradient_accum[mask].cpu()
+            # new_gaussians.t_gradient_accum = gaussians.t_gradient_accum[mask].cpu()
+            # new_gaussians.denom = gaussians.denom[mask].cpu()
+            # #self.spatial_lr_scale = gaussians.spatial_lr_scale[mask].cpu()
+            # new_gaussians._t = gaussians._t[mask].cpu()
+            # new_gaussians._scaling_t = gaussians._scaling_t[mask].cpu()
+            # new_gaussians._rotation_r = gaussians._rotation_r[mask].cpu()
+
+            # new_gaussians.rot_4d = gaussians.rot_4d
+            # if gaussians.env_map is not None:
+            #     self.env_map = gaussians.env_map[mask].cpu()
+            #new_gaussian.active_sh_degree_t = self.active_sh_degree_t
+            #new_gaussian.percent_dense = self.percent_dense
+            #new_gaussian.optimizer = self.optimizer
+            #new_gaussian.max_sh_degree = self.max_sh_degree
+            # new_gaussians.gaussian_dim = gaussians.gaussian_dim
+            # new_gaussians.time_duration = gaussians.time_duration
+            # new_gaussians.force_sh_3d = gaussians.force_sh_3d
+            # new_gaussians.max_sh_degree_t = gaussians.max_sh_degree_t
+            # for group in gaussians.optimizer.param_groups:
+            #     optimizer_state = gaussians.optimizer.state.get(group["params"][0], None)
+            #     #attr = self.get_param_group_corresponding_attr(group["name"])
+            #     if optimizer_state is not None and len(optimizer_state) != 0:
+            #         state_content = {}
+            #         state_content["step"] = optimizer_state["step"].cpu()
+            #         state_content["exp_avg"] = optimizer_state["exp_avg"][mask].cpu()
+            #         state_content["exp_avg_sq"] = optimizer_state["exp_avg_sq"][mask].cpu()
+            #         new_gaussians.opt_states[group["name"]] = state_content
 
     def clone_from_cpu(self, gaussians_segments):
         xyz_list = []
@@ -485,39 +538,71 @@ class GaussianModel:
             return self._rotation_r
         return None
 
-    def append_from_gaussians_gpu(self, mask : torch.Tensor, gaussians : "GaussianModel"):
-        self._xyz = torch.cat([self._xyz, gaussians._xyz[mask].cpu()])
-        self._features_dc = torch.cat([self._features_dc, gaussians._features_dc[mask].cpu()])
-        self._features_rest = torch.cat([self._features_rest, gaussians._features_rest[mask].cpu()])
-        self._scaling = torch.cat([self._scaling, gaussians._scaling[mask].cpu()])
-        self._rotation = torch.cat([self._rotation, gaussians._rotation[mask].cpu()])
-        self._opacity = torch.cat([self._opacity, gaussians._opacity[mask].cpu()])
-        self.max_radii2D = torch.cat([self.max_radii2D, gaussians.max_radii2D[mask].cpu()])
-        self.xyz_gradient_accum = torch.cat([self.xyz_gradient_accum, gaussians.xyz_gradient_accum[mask].cpu()])
-        self.t_gradient_accum = torch.cat([self.t_gradient_accum, gaussians.t_gradient_accum[mask].cpu()])
-        self.denom = torch.cat([self.denom, gaussians.denom[mask].cpu()])
-        #self.spatial_lr_scale = torch.cat([self.spatial_lr_scale, gaussians.spatial_lr_scale[mask]]).cpu()
-        self._t = torch.cat([self._t, gaussians._t[mask].cpu()])
-        self._scaling_t = torch.cat([self._scaling_t, gaussians._scaling_t[mask].cpu()])
-        self._rotation_r = torch.cat([self._rotation_r, gaussians._rotation_r[mask].cpu()])
-        # if gaussians.env_map is not None:
-        #     self.env_map = torch.cat([self.env_map, gaussians.env_map[mask]]).cpu()
-        for group in gaussians.optimizer.param_groups:
-            optimizer_state = gaussians.optimizer.state.get(group["params"][0], None)
-            if optimizer_state is not None:
-                state_content = {}
-                state_content["step"] = optimizer_state["step"].cpu()
-                state_content["exp_avg"] = optimizer_state["exp_avg"][mask].cpu()
-                state_content["exp_avg_sq"] = optimizer_state["exp_avg_sq"][mask].cpu()
-                #attr = self.get_param_group_corresponding_attr(group["name"])
-                tgh_gaussian_state = self.opt_states.get(group["name"], None)
-                if tgh_gaussian_state is not None:
-                    tgh_gaussian_state["step"] = state_content["step"]
-                    tgh_gaussian_state["exp_avg"] = torch.cat([tgh_gaussian_state["exp_avg"], state_content["exp_avg"]])
-                    tgh_gaussian_state["exp_avg_sq"] = torch.cat([tgh_gaussian_state["exp_avg_sq"], state_content["exp_avg_sq"]])
-                    #self.opt_states[group["name"]] = tgh_gaussian_state
-                else:
-                    self.opt_states[group["name"]] = state_content
+    def append_from_gaussians_gpu(self, mask : torch.Tensor, gaussians : "GaussianModel", new_gaussians : "GaussianModel"):
+        if new_gaussians is None:
+            self._xyz = torch.cat([self._xyz, gaussians._xyz[mask].cpu()])
+            self._features_dc = torch.cat([self._features_dc, gaussians._features_dc[mask].cpu()])
+            self._features_rest = torch.cat([self._features_rest, gaussians._features_rest[mask].cpu()])
+            self._scaling = torch.cat([self._scaling, gaussians._scaling[mask].cpu()])
+            self._rotation = torch.cat([self._rotation, gaussians._rotation[mask].cpu()])
+            self._opacity = torch.cat([self._opacity, gaussians._opacity[mask].cpu()])
+            self.max_radii2D = torch.cat([self.max_radii2D, gaussians.max_radii2D[mask].cpu()])
+            self.xyz_gradient_accum = torch.cat([self.xyz_gradient_accum, gaussians.xyz_gradient_accum[mask].cpu()])
+            self.t_gradient_accum = torch.cat([self.t_gradient_accum, gaussians.t_gradient_accum[mask].cpu()])
+            self.denom = torch.cat([self.denom, gaussians.denom[mask].cpu()])
+            #self.spatial_lr_scale = torch.cat([self.spatial_lr_scale, gaussians.spatial_lr_scale[mask]]).cpu()
+            self._t = torch.cat([self._t, gaussians._t[mask].cpu()])
+            self._scaling_t = torch.cat([self._scaling_t, gaussians._scaling_t[mask].cpu()])
+            self._rotation_r = torch.cat([self._rotation_r, gaussians._rotation_r[mask].cpu()])
+            # if gaussians.env_map is not None:
+            #     self.env_map = torch.cat([self.env_map, gaussians.env_map[mask]]).cpu()
+            for group in gaussians.optimizer.param_groups:
+                optimizer_state = gaussians.optimizer.state.get(group["params"][0], None)
+                if optimizer_state is not None:
+                    state_content = {}
+                    state_content["step"] = optimizer_state["step"].cpu()
+                    state_content["exp_avg"] = optimizer_state["exp_avg"][mask].cpu()
+                    state_content["exp_avg_sq"] = optimizer_state["exp_avg_sq"][mask].cpu()
+                    #attr = self.get_param_group_corresponding_attr(group["name"])
+                    tgh_gaussian_state = self.opt_states.get(group["name"], None)
+                    if tgh_gaussian_state is not None:
+                        tgh_gaussian_state["step"] = state_content["step"]
+                        tgh_gaussian_state["exp_avg"] = torch.cat([tgh_gaussian_state["exp_avg"], state_content["exp_avg"]])
+                        tgh_gaussian_state["exp_avg_sq"] = torch.cat([tgh_gaussian_state["exp_avg_sq"], state_content["exp_avg_sq"]])
+                        #self.opt_states[group["name"]] = tgh_gaussian_state
+                    else:
+                        self.opt_states[group["name"]] = state_content
+        else:
+            new_gaussians._xyz = torch.cat([new_gaussians._xyz, self._xyz, gaussians._xyz[mask].cpu()])
+            new_gaussians._features_dc = torch.cat([new_gaussians._features_dc, self._features_dc, gaussians._features_dc[mask].cpu()])
+            new_gaussians._features_rest = torch.cat([new_gaussians._features_rest, self._features_rest, gaussians._features_rest[mask].cpu()])
+            new_gaussians._scaling = torch.cat([new_gaussians._scaling, self._scaling, gaussians._scaling[mask].cpu()])
+            new_gaussians._rotation = torch.cat([new_gaussians._rotation, self._rotation, gaussians._rotation[mask].cpu()])
+            new_gaussians._opacity = torch.cat([new_gaussians._opacity, self._opacity, gaussians._opacity[mask].cpu()])
+            new_gaussians.max_radii2D = torch.cat([new_gaussians.max_radii2D, self.max_radii2D, gaussians.max_radii2D[mask].cpu()])
+            new_gaussians.xyz_gradient_accum = torch.cat([new_gaussians.xyz_gradient_accum, self.xyz_gradient_accum, gaussians.xyz_gradient_accum[mask].cpu()])
+            new_gaussians.t_gradient_accum = torch.cat([new_gaussians.t_gradient_accum, self.t_gradient_accum, gaussians.t_gradient_accum[mask].cpu()])
+            new_gaussians.denom = torch.cat([new_gaussians.denom, self.denom, gaussians.denom[mask].cpu()])
+            #self.spatial_lr_scale = torch.cat([self.spatial_lr_scale, gaussians.spatial_lr_scale[mask]]).cpu()
+            new_gaussians._t = torch.cat([new_gaussians._t, self._t, gaussians._t[mask].cpu()])
+            new_gaussians._scaling_t = torch.cat([new_gaussians._scaling_t, self._scaling_t, gaussians._scaling_t[mask].cpu()])
+            new_gaussians._rotation_r = torch.cat([new_gaussians._rotation_r, self._rotation_r, gaussians._rotation_r[mask].cpu()])
+            # if gaussians.env_map is not None:
+            #     self.env_map = torch.cat([self.env_map, gaussians.env_map[mask]]).cpu()
+            # for group in gaussians.optimizer.param_groups:
+            #     optimizer_state = gaussians.optimizer.state.get(group["params"][0], None)
+            #     if optimizer_state is not None:
+            #         state_content = {}
+            #         state_content["step"] = optimizer_state["step"].cpu()
+            #         state_content["exp_avg"] = optimizer_state["exp_avg"][mask].cpu()
+            #         state_content["exp_avg_sq"] = optimizer_state["exp_avg_sq"][mask].cpu()
+            #         #attr = self.get_param_group_corresponding_attr(group["name"])
+            #         tgh_gaussian_state = self.opt_states.get(group["name"], None)
+            #         if tgh_gaussian_state is not None:
+            #             state_content["exp_avg"] = torch.cat([new_gaussians.opt_states.get(group["name"])["exp_avg"], tgh_gaussian_state["exp_avg"], state_content["exp_avg"]])
+            #             state_content["exp_avg_sq"] = torch.cat([new_gaussians.opt_states.get(group["name"])["exp_avg_sq"], tgh_gaussian_state["exp_avg_sq"], state_content["exp_avg_sq"]])
+            #             #self.opt_states[group["name"]] = tgh_gaussian_state
+            #         new_gaussians.opt_states[group["name"]] = state_content
 
         
 
