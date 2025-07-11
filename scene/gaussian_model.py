@@ -741,7 +741,7 @@ class GaussianModel:
                                                               self._rotation_r,
                                                               dt = timestamp - self.get_t)
     def get_current_cov_and_mean_t(self, scaling_modifier = 1):
-        return self.get_t, self.cov_t_activation(self.get_xyzt, scaling_modifier, self._rotation, self._rotation_r)
+        return self.get_t, self.cov_t_activation(self.get_scaling_xyzt, scaling_modifier, self._rotation, self._rotation_r)
 
     def oneupSHdegree(self):
         if self.active_sh_degree < self.max_sh_degree:

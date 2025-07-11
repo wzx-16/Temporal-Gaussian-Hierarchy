@@ -71,10 +71,11 @@ class TemperalGaussianHierarchy():
             gaussians_level_start = torch.floor(gaussians_start / current_length).to(torch.int64).squeeze(-1)
             gaussians_level_end = torch.floor(gaussians_end / current_length).to(torch.int64).squeeze(-1)
             #mask = mask & (gaussians_level_start != gaussians_level_end)
-            #last_segment_count = 1 if level == 1 else math.ceil((self.time_duration[1] - self.time_duration[0]) / last_layer_length)
+            last_segment_count = 1 if level == 1 else math.ceil((self.time_duration[1] - self.time_duration[0]) / last_layer_length)
             active_mask = mask & (gaussians_level_start != gaussians_level_end)
             replace_ind = 0 if level == 1 else math.floor(gaussians.current_timestamp / last_layer_length)
             segments_for_update = torch.unique(gaussians_last_level_ind[active_mask], sorted = False)
+            #segments_for_update = segments_for_update[segments_for_update < last_segment_count]
             #prepare_end = time.time()
             #torch.cuda.synchronize()
             #print(f"prepare timne: {prepare_end - prepare_start:.6f} seconds")
@@ -82,6 +83,8 @@ class TemperalGaussianHierarchy():
             for ind in segments_for_update:
                 #mask_compute_start1 = time.time()
                 idx = ind.item()
+                if idx >= last_segment_count:
+                    continue
                 actual_mask = active_mask & (idx == gaussians_last_level_ind)
                 #mask_compute_end1 = time.time()
                 #torch.cuda.synchronize()
@@ -112,6 +115,8 @@ class TemperalGaussianHierarchy():
                 segments_for_update = torch.unique(gaussians_level_start[mask], sorted = False)
                 for ind in segments_for_update:
                     idx = ind.item()
+                    if idx >= math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length):
+                        continue
                     if idx == math.floor(gaussians.current_timestamp / current_length):
                         self.layers[level][idx].clone_by_mask(mask & (idx == gaussians_level_start), gaussians, opt, new_gaussians)
                         replace_flag = True
