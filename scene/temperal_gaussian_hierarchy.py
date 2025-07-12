@@ -21,7 +21,8 @@ class TemperalGaussianHierarchy():
         for level in range(1, level_count + 1):
             current_layer_length = max_layer_length / 2**(level - 1)
             current_layer = []
-            segment_count = math.ceil((time_duration[1] - time_duration[0]) / current_layer_length)
+            # offset may need one more
+            segment_count = math.ceil((time_duration[1] - time_duration[0]) / current_layer_length) + 1
             for ind in range(segment_count):
                 segment = GaussianModel(sh_degree, gaussian_dim, time_duration, rot_4d, force_sh_3d, sh_degree_t)
                 current_layer.append(segment)
@@ -34,98 +35,134 @@ class TemperalGaussianHierarchy():
         effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda"))) * torch.abs(cov_t)
         gaussians_start = torch.clamp(mean_t - effect_range, min=0)
         gaussians_end = torch.clamp(mean_t + effect_range, min= 0)
-        gaussians_last_level_ind = torch.zeros(gaussians_start.shape[0], device="cuda")
+        #gaussians_last_level_ind = torch.zeros(gaussians_start.shape[0], device="cuda")
         mask = torch.full(gaussians_start.shape, True, dtype=torch.bool, device="cuda").squeeze(-1)
         # gaussians_last_level_end = torch.empty(gaussians_end.shape[0])
         # mask = torch.empty(self.level_count, gaussians_end.shape[0])
-        for level in range(1, self.level_count + 1):
-            last_layer_length = 0 if level == 1 else self.max_layer_length / 2**(level - 2)
-            current_length = self.max_layer_length / 2**(level - 1)
-            gaussians_level_start = torch.floor(gaussians_start / current_length).squeeze(-1)
-            gaussians_level_end = torch.floor(gaussians_end / current_length).squeeze(-1)
-            #mask = (mask & (gaussians_level_start != gaussians_level_end))
-            last_segment_count = 1 if level == 1 else math.ceil((self.time_duration[1] - self.time_duration[0]) / last_layer_length)
-            for ind in range(last_segment_count):
-                self.layers[level - 1][ind].clone_by_mask(mask & (gaussians_level_start != gaussians_level_end) & (ind == gaussians_last_level_ind), gaussians, opt, None)
+        # for level in range(1, self.level_count + 1):
+        #     last_layer_length = 0 if level == 1 else self.max_layer_length / 2**(level - 2)
+        #     current_length = self.max_layer_length / 2**(level - 1)
+        #     gaussians_level_start = torch.floor(gaussians_start / current_length).squeeze(-1)
+        #     gaussians_level_end = torch.floor(gaussians_end / current_length).squeeze(-1)
+        #     #mask = (mask & (gaussians_level_start != gaussians_level_end))
+        #     last_segment_count = 1 if level == 1 else math.ceil((self.time_duration[1] - self.time_duration[0]) / last_layer_length)
+        #     for ind in range(last_segment_count):
+        #         self.layers[level - 1][ind].clone_by_mask(mask & (gaussians_level_start != gaussians_level_end) & (ind == gaussians_last_level_ind), gaussians, opt, None)
             
-            #mask = ~mask
-            mask = (mask & (gaussians_level_start == gaussians_level_end))
+        #     #mask = ~mask
+        #     mask = (mask & (gaussians_level_start == gaussians_level_end))
 
-            if level == self.level_count:
-                for ind in range(math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length)):
-                    self.layers[level][ind].clone_by_mask(mask & (ind == gaussians_level_start), gaussians, opt, None)
-            gaussians_last_level_ind = gaussians_level_start
+        #     if level == self.level_count:
+        #         for ind in range(math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length)):
+        #             self.layers[level][ind].clone_by_mask(mask & (ind == gaussians_level_start), gaussians, opt, None)
+        #     gaussians_last_level_ind = gaussians_level_start
+
+        for level in range(self.level_count, -1, -1):
+            current_length = self.max_layer_length / 2**(level - 1)
+            offset = self.max_layer_length / 2**(level + 1)
+            gaussians_level_start = torch.floor((gaussians_start + offset) / current_length).squeeze(-1)
+            gaussians_level_end = torch.floor((gaussians_end + offset) / current_length).squeeze(-1)
+            segment_count = 1 if level == 0 else (math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length)) + 1
+            for ind in range(segment_count):
+                self.layers[level][ind].clone_by_mask(mask & (gaussians_level_start == gaussians_level_end) & (ind == gaussians_level_start), gaussians, opt, None)
+            
+            mask = mask & (gaussians_level_start != gaussians_level_end)
 
     def update_from_gaussians(self, gaussians : GaussianModel, opt, new_gaussians : GaussianModel, o_th : float = 0.05):
         mean_t, cov_t = gaussians.get_current_cov_and_mean_t()
         effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda"))) * torch.abs(cov_t)
         gaussians_start = torch.clamp(mean_t - effect_range, min=0)
         gaussians_end = torch.clamp(mean_t + effect_range, min= 0)
-        gaussians_last_level_ind = torch.zeros(gaussians_start.shape[0], dtype=torch.int64, device = "cuda")
+        #gaussians_last_level_ind = torch.zeros(gaussians_start.shape[0], dtype=torch.int64, device = "cuda")
         mask = torch.full(gaussians_start.shape, True, dtype=torch.bool, device="cuda").squeeze(-1)
-        for level in range(1, self.level_count + 1):
-            #level_start = time.time()
-            #prepare_start = time.time()
-            last_layer_length = 0 if level == 1 else self.max_layer_length / 2**(level - 2)
+        # for level in range(1, self.level_count + 1):
+        #     #level_start = time.time()
+        #     #prepare_start = time.time()
+        #     last_layer_length = 0 if level == 1 else self.max_layer_length / 2**(level - 2)
+        #     current_length = self.max_layer_length / 2**(level - 1)
+        #     gaussians_level_start = torch.floor(gaussians_start / current_length).to(torch.int64).squeeze(-1)
+        #     gaussians_level_end = torch.floor(gaussians_end / current_length).to(torch.int64).squeeze(-1)
+        #     #mask = mask & (gaussians_level_start != gaussians_level_end)
+        #     last_segment_count = 1 if level == 1 else math.ceil((self.time_duration[1] - self.time_duration[0]) / last_layer_length)
+        #     active_mask = mask & (gaussians_level_start != gaussians_level_end)
+        #     replace_ind = 0 if level == 1 else math.floor(gaussians.current_timestamp / last_layer_length)
+        #     segments_for_update = torch.unique(gaussians_last_level_ind[active_mask], sorted = False)
+        #     #segments_for_update = segments_for_update[segments_for_update < last_segment_count]
+        #     #prepare_end = time.time()
+        #     #torch.cuda.synchronize()
+        #     #print(f"prepare timne: {prepare_end - prepare_start:.6f} seconds")
+        #     replace_flag = False
+        #     for ind in segments_for_update:
+        #         #mask_compute_start1 = time.time()
+        #         idx = ind.item()
+        #         if idx >= last_segment_count:
+        #             continue
+        #         actual_mask = active_mask & (idx == gaussians_last_level_ind)
+        #         #mask_compute_end1 = time.time()
+        #         #torch.cuda.synchronize()
+        #         #print(f"mask compute time1: {mask_compute_end1 - mask_compute_start1:.6f} seconds")
+        #         #mem_copy_start = time.time()
+        #         if idx == replace_ind:
+        #             self.layers[level - 1][idx].clone_by_mask(actual_mask, gaussians, opt, new_gaussians)
+        #             replace_flag = True
+        #         else:
+        #             self.layers[level - 1][idx].append_from_gaussians_gpu(actual_mask, gaussians, new_gaussians)
+        #     if not replace_flag:
+        #         self.layers[level - 1][replace_ind].clone_by_mask(active_mask & (replace_ind == gaussians_last_level_ind), gaussians, opt, new_gaussians)
+        #         #mem_copy_end = time.time()
+        #         #torch.cuda.synchronize()
+        #         #print(f"memory copy time: {mem_copy_end - mem_copy_start:.6f} seconds")
+        #         #print("test")
+        #     #mask_compute_start2 = time.time()
+            
+        #     mask = (mask & (gaussians_level_start == gaussians_level_end))
+        #     #mask_compute_end2 = time.time()
+        #     #torch.cuda.synchronize()
+        #     #print(f"mask compute time2: {mask_compute_end2 - mask_compute_start2:.6f} seconds")
+        #     #level_end = time.time()
+        #     #torch.cuda.synchronize()
+        #     #print(f"level time:{level_end - level_start:.6f}second")
+        #     replace_flag = False
+        #     if level == self.level_count:
+        #         segments_for_update = torch.unique(gaussians_level_start[mask], sorted = False)
+        #         for ind in segments_for_update:
+        #             idx = ind.item()
+        #             if idx >= math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length):
+        #                 continue
+        #             if idx == math.floor(gaussians.current_timestamp / current_length):
+        #                 self.layers[level][idx].clone_by_mask(mask & (idx == gaussians_level_start), gaussians, opt, new_gaussians)
+        #                 replace_flag = True
+        #             else:
+        #                 self.layers[level][idx].append_from_gaussians_gpu(mask & (idx == gaussians_level_start), gaussians, new_gaussians)
+        #         if not replace_flag:
+        #             replace_idx = math.floor(gaussians.current_timestamp / current_length)
+        #             self.layers[level][replace_idx].clone_by_mask(mask & (replace_idx == gaussians_level_start), gaussians, opt, new_gaussians)
+        #     gaussians_last_level_ind = gaussians_level_start
+
+        for level in range(self.level_count, -1, -1):
             current_length = self.max_layer_length / 2**(level - 1)
-            gaussians_level_start = torch.floor(gaussians_start / current_length).to(torch.int64).squeeze(-1)
-            gaussians_level_end = torch.floor(gaussians_end / current_length).to(torch.int64).squeeze(-1)
-            #mask = mask & (gaussians_level_start != gaussians_level_end)
-            last_segment_count = 1 if level == 1 else math.ceil((self.time_duration[1] - self.time_duration[0]) / last_layer_length)
-            active_mask = mask & (gaussians_level_start != gaussians_level_end)
-            replace_ind = 0 if level == 1 else math.floor(gaussians.current_timestamp / last_layer_length)
-            segments_for_update = torch.unique(gaussians_last_level_ind[active_mask], sorted = False)
-            #segments_for_update = segments_for_update[segments_for_update < last_segment_count]
-            #prepare_end = time.time()
-            #torch.cuda.synchronize()
-            #print(f"prepare timne: {prepare_end - prepare_start:.6f} seconds")
+            offset = self.max_layer_length / 2**(level + 1)
+            gaussians_level_start = torch.floor((gaussians_start + offset) / current_length).to(torch.int64).squeeze(-1)
+            gaussians_level_end = torch.floor((gaussians_end + offset) / current_length).to(torch.int64).squeeze(-1)
+            segment_count = 1 if level == 0 else (math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length)) + 1
+            active_mask = mask & (gaussians_level_start == gaussians_level_end)
+            replace_ind = 0 if level == 0 else math.floor((gaussians.current_timestamp + offset) / current_length)
+            segments_for_update = torch.unique(gaussians_level_start[active_mask], sorted = False)
             replace_flag = False
             for ind in segments_for_update:
-                #mask_compute_start1 = time.time()
                 idx = ind.item()
-                if idx >= last_segment_count:
+                if idx >= segment_count:
                     continue
-                actual_mask = active_mask & (idx == gaussians_last_level_ind)
-                #mask_compute_end1 = time.time()
-                #torch.cuda.synchronize()
-                #print(f"mask compute time1: {mask_compute_end1 - mask_compute_start1:.6f} seconds")
-                #mem_copy_start = time.time()
+                actual_mask = active_mask & (idx == gaussians_level_start)
                 if idx == replace_ind:
-                    self.layers[level - 1][idx].clone_by_mask(actual_mask, gaussians, opt, new_gaussians)
+                    self.layers[level][idx].clone_by_mask(actual_mask, gaussians, opt, new_gaussians)
                     replace_flag = True
                 else:
-                    self.layers[level - 1][idx].append_from_gaussians_gpu(actual_mask, gaussians, new_gaussians)
+                    self.layers[level][idx].append_from_gaussians_gpu(actual_mask, gaussians, new_gaussians)
             if not replace_flag:
-                self.layers[level - 1][replace_ind].clone_by_mask(active_mask & (replace_ind == gaussians_last_level_ind), gaussians, opt, new_gaussians)
-                #mem_copy_end = time.time()
-                #torch.cuda.synchronize()
-                #print(f"memory copy time: {mem_copy_end - mem_copy_start:.6f} seconds")
-                #print("test")
-            #mask_compute_start2 = time.time()
+                self.layers[level][replace_ind].clone_by_mask(active_mask & (replace_ind == gaussians_level_start), gaussians, opt, new_gaussians)
             
-            mask = (mask & (gaussians_level_start == gaussians_level_end))
-            #mask_compute_end2 = time.time()
-            #torch.cuda.synchronize()
-            #print(f"mask compute time2: {mask_compute_end2 - mask_compute_start2:.6f} seconds")
-            #level_end = time.time()
-            #torch.cuda.synchronize()
-            #print(f"level time:{level_end - level_start:.6f}second")
-            replace_flag = False
-            if level == self.level_count:
-                segments_for_update = torch.unique(gaussians_level_start[mask], sorted = False)
-                for ind in segments_for_update:
-                    idx = ind.item()
-                    if idx >= math.ceil((self.time_duration[1] - self.time_duration[0]) / current_length):
-                        continue
-                    if idx == math.floor(gaussians.current_timestamp / current_length):
-                        self.layers[level][idx].clone_by_mask(mask & (idx == gaussians_level_start), gaussians, opt, new_gaussians)
-                        replace_flag = True
-                    else:
-                        self.layers[level][idx].append_from_gaussians_gpu(mask & (idx == gaussians_level_start), gaussians, new_gaussians)
-                if not replace_flag:
-                    replace_idx = math.floor(gaussians.current_timestamp / current_length)
-                    self.layers[level][replace_idx].clone_by_mask(mask & (replace_idx == gaussians_level_start), gaussians, opt, new_gaussians)
-            gaussians_last_level_ind = gaussians_level_start
+            mask = mask & (gaussians_level_start != gaussians_level_end)
 
     def put_current_related_gaussians(self, timestamp : float, gaussians : "GaussianModel"):
         gaussians.set_current_timestamp(timestamp)
@@ -133,7 +170,8 @@ class TemperalGaussianHierarchy():
         #state_dict = self.layers[0][0].clone_to(gaussians)
         gaussians_segments = [self.layers[0][0]]
         for level in range(1, self.level_count + 1):
-            current_ind = math.floor(timestamp / (self.max_layer_length / 2**(level - 1)))
+            offset = self.max_layer_length / 2**(level + 1)
+            current_ind = math.floor((timestamp + offset) / (self.max_layer_length / 2**(level - 1)))
             gaussians_segments.append(self.layers[level][current_ind])
             #gaussians.append_from_gaussians_cpu(self.layers[level][current_ind])
         gaussians.clone_from_cpu(gaussians_segments)

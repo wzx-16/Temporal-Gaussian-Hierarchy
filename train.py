@@ -237,7 +237,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     progress_bar.close()
 
                 # Log and save
-                save_flag = False
                 test_psnr = training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), loss_dict)
                 if (iteration in testing_iterations):
                     if test_psnr >= best_psnr:
@@ -245,11 +244,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                         print("\n[ITER {}] Saving best checkpoint".format(iteration))
                         torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt_best.pth")
                         torch.save((tgh.capture(gaussians, opt), iteration), scene.model_path + "/tgh_chkpnt_best.pth")
-                        save_flag = True
                         
                 if (iteration in saving_iterations):
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
-                    scene.save(iteration)
+                    scene.save(iteration, opt, tgh)
 
 
                 # Densification
@@ -403,8 +401,8 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--start_checkpoint", type=str, default = None)
     
@@ -419,7 +417,7 @@ if __name__ == "__main__":
     parser.add_argument("--exhaust_test", action="store_true")
     
     args = parser.parse_args(sys.argv[1:])
-    args.save_iterations.append(args.iterations)
+    #args.save_iterations.append(args.iterations)
         
     cfg = OmegaConf.load(args.config)
     def recursive_merge(key, host):
@@ -433,8 +431,8 @@ if __name__ == "__main__":
         recursive_merge(k, cfg)
         
     if args.exhaust_test:
-        args.test_iterations = args.test_iterations + [i for i in range(0,op.iterations,500)]
-    
+        args.test_iterations = args.test_iterations + [i for i in range(0,args.iterations + 1,500)]
+    args.save_iterations = args.save_iterations + [i for i in range(5000,args.iterations + 1,5000)]
     setup_seed(args.seed)
     
     print("Optimizing " + args.model_path)
