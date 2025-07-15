@@ -1,10 +1,10 @@
 gaussian_dim: 4
 time_duration: [0.0, 10.0]
-num_pts: 300_000
+num_pts: 1000_000
 num_pts_ratio: 1.0
 rot_4d: True
 force_sh_3d: False
-batch_size: 4
+batch_size: 1
 exhaust_test: True
 
 ModelParams:
@@ -32,7 +32,7 @@ PipelineParams:
   eval_shfs_4d: True
 
 OptimizationParams:
-  iterations: 30_000
+  iterations: 50_000
   position_lr_init: 0.00016
   position_t_lr_init: -1.0
   position_lr_final: 0.0000016

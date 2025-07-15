@@ -792,6 +792,48 @@ class GaussianModel:
             if self.rot_4d:
                 self._rotation_r = nn.Parameter(rots_r.requires_grad_(True))
 
+        # self.spatial_lr_scale = spatial_lr_scale
+        # fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float()
+        # fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float())
+        # features = torch.zeros((fused_color.shape[0], 3, self.get_max_sh_channels)).float()
+        # features[:, :3, 0 ] = fused_color
+        # features[:, 3:, 1:] = 0.0
+        # if self.gaussian_dim == 4:
+        #     if pcd.time is None:
+        #         fused_times = (torch.rand(fused_point_cloud.shape[0], 1, device="cpu") * 1.2 - 0.1) * (self.time_duration[1] - self.time_duration[0]) + self.time_duration[0]
+        #     else:
+        #         fused_times = torch.from_numpy(pcd.time).float()
+            
+        # print("Number of points at initialisation : ", fused_point_cloud.shape[0])
+
+        # dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float()), 0.0000001)
+        # scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
+        # rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        # rots[:, 0] = 1
+        # if self.gaussian_dim == 4:
+        #     # dist_t = torch.clamp_min(distCUDA2(fused_times.repeat(1,3)), 1e-10)[...,None]
+        #     dist_t = torch.zeros_like(fused_times, device="cpu") + (self.time_duration[1] - self.time_duration[0]) / 5
+        #     scales_t = torch.log(torch.sqrt(dist_t))
+        #     if self.rot_4d:
+        #         rots_r = torch.zeros((fused_point_cloud.shape[0], 4), device="cpu")
+        #         rots_r[:, 0] = 1
+
+        # opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cpu"))
+
+        # self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
+        # self._features_dc = nn.Parameter(features[:,:,0:1].transpose(1, 2).contiguous().requires_grad_(True))
+        # self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous().requires_grad_(True))
+        # self._scaling = nn.Parameter(scales.requires_grad_(True))
+        # self._rotation = nn.Parameter(rots.requires_grad_(True))
+        # self._opacity = nn.Parameter(opacities.requires_grad_(True))
+        # self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cpu")
+        
+        # if self.gaussian_dim == 4:
+        #     self._t = nn.Parameter(fused_times.requires_grad_(True))
+        #     self._scaling_t = nn.Parameter(scales_t.requires_grad_(True))
+        #     if self.rot_4d:
+        #         self._rotation_r = nn.Parameter(rots_r.requires_grad_(True))
+
     def create_from_pcd_cpu(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float()

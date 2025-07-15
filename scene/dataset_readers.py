@@ -27,6 +27,7 @@ import torch
 from utils.general_utils import fps
 from multiprocessing.pool import ThreadPool
 import imagesize
+import glob
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -128,6 +129,39 @@ def fetchPly(path):
         timestamp = vertices['time'][:, None]
     else:
         timestamp = None
+    return BasicPointCloud(points=positions, colors=colors, normals=normals, time=timestamp)
+
+def fetchPlyList(paths):
+    positions = None
+    colors = None
+    normals = None
+    for path in paths:
+        plydata = PlyData.read(path)
+        vertices = plydata['vertex']
+        if positions is None:
+            positions = np.vstack([vertices['x'], vertices['y'], vertices['z']]).T
+            colors = np.vstack([vertices['red'], vertices['green'], vertices['blue']]).T / 255.0
+            if 'nx' in vertices:
+                normals = np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T
+            else:
+                normals = np.zeros_like(positions)
+            if 'time' in vertices:
+                timestamp = vertices['time'][:, None]
+            else:
+                frame_num = int(path.split("/")[-1].split("_")[-1].split(".")[0], base=10)
+                timestamp = np.full((vertices['x'].shape[0], 1), frame_num * (1/30), dtype=float)
+        else:
+            positions = np.vstack([positions, np.vstack([vertices['x'], vertices['y'], vertices['z']]).T])
+            colors = np.vstack([colors, np.vstack([vertices['red'], vertices['green'], vertices['blue']]).T / 255.0])
+            if 'nx' in vertices:
+                normals = np.vstack([normals, np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T])
+            else:
+                normals = np.vstack([normals, np.zeros_like(positions)])
+            if 'time' in vertices:
+                timestamp = np.vstack([timestamp, vertices['time'][:, None]])
+            else:
+                frame_num = int(path.split("/")[-1].split("_")[-1].split(".")[0], base=10)
+                timestamp = np.vstack([timestamp, np.full((vertices['x'].shape[0], 1), frame_num * (1/30), dtype=float)])
     return BasicPointCloud(points=positions, colors=colors, normals=normals, time=timestamp)
 
 def storePly(path, xyz, rgb):
@@ -307,7 +341,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
     
     return cam_infos
 
-def readNerfSyntheticInfo(path, white_background, eval, extension=".png", num_pts=100_000, time_duration=None, num_extra_pts=0, frame_ratio=1, dataloader=False):
+def readNerfSyntheticInfo(path, white_background, eval, extension=".png", num_pts=100_000, time_duration=None, num_extra_pts=0, frame_ratio=1, dataloader=False, render=False):
     
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension, time_duration=time_duration, frame_ratio=frame_ratio, dataloader=dataloader)
@@ -319,75 +353,82 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", num_pt
         test_cam_infos = []
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
+    if not render:
+        file_format = "points3d_*.ply"
+        ply_paths = glob.glob(f"{path}/{file_format}")
+        ply_path_origin = os.path.join(path, "points3d.ply")
+        if len(ply_paths) == 0:
+            if not os.path.exists(ply_path_origin):
+                # Since this data set has no colmap data, we start with random points
+                print(f"Generating random point cloud ({num_pts})...")
+                
+                # We create random points inside the bounds of the synthetic Blender scenes
+                xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
+                shs = np.random.random((num_pts, 3)) / 255.0
+                pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
 
-    ply_path = os.path.join(path, "points3d.ply")
-    if not os.path.exists(ply_path):
-        # Since this data set has no colmap data, we start with random points
-        print(f"Generating random point cloud ({num_pts})...")
-        
-        # We create random points inside the bounds of the synthetic Blender scenes
-        xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
-        shs = np.random.random((num_pts, 3)) / 255.0
-        pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
-
-        storePly(ply_path, xyz, SH2RGB(shs) * 255)
-    try:
-        pcd = fetchPly(ply_path)
-    except:
-        pcd = None
-
-    if pcd.points.shape[0] > num_pts:
-        mask = np.random.randint(0, pcd.points.shape[0], num_pts)
-        # mask = fps(torch.from_numpy(pcd.points).cuda()[None], num_pts).cpu().numpy()
-        if pcd.time is not None:
-            times = pcd.time[mask]
+                storePly(ply_path_origin, xyz, SH2RGB(shs) * 255)
+            try:
+                pcd = fetchPly(ply_path_origin)
+            except:
+                pcd = None
         else:
-            times = None
-        xyz = pcd.points[mask]
-        rgb = pcd.colors[mask]
-        normals = pcd.normals[mask]
-        if times is not None:
-            time_mask = (times[:,0] < time_duration[1]) & (times[:,0] > time_duration[0])
-            xyz = xyz[time_mask]
-            rgb = rgb[time_mask]
-            normals = normals[time_mask]
-            times = times[time_mask]
-        pcd = BasicPointCloud(points=xyz, colors=rgb, normals=normals, time=times)
-        
-    if num_extra_pts > 0:
-        times = pcd.time
-        xyz = pcd.points
-        rgb = pcd.colors
-        normals = pcd.normals
-        bound_min, bound_max = xyz.min(0), xyz.max(0)
-        radius = 60.0 # (bound_max - bound_min).mean() + 10
-        phi = 2.0 * np.pi * np.random.rand(num_extra_pts)
-        theta = np.arccos(2.0 * np.random.rand(num_extra_pts) - 1.0)
-        x = radius * np.sin(theta) * np.cos(phi)
-        y = radius * np.sin(theta) * np.sin(phi)
-        z = radius * np.cos(theta)
-        xyz_extra = np.stack([x, y, z], axis=1)
-        normals_extra = np.zeros_like(xyz_extra)
-        rgb_extra = np.ones((num_extra_pts, 3)) / 2
-        
-        xyz = np.concatenate([xyz, xyz_extra], axis=0)
-        rgb = np.concatenate([rgb, rgb_extra], axis=0)
-        normals = np.concatenate([normals, normals_extra], axis=0)
-        
-        if times is not None:
-            times_extra = torch.zeros(((num_extra_pts, 3))) + (time_duration[0] + time_duration[1]) / 2
-            times = np.concatenate([times, times_extra], axis=0)
+            pcd = fetchPlyList(ply_paths)
+
+        if pcd.points.shape[0] > num_pts:
+            mask = np.random.randint(0, pcd.points.shape[0], num_pts)
+            # mask = fps(torch.from_numpy(pcd.points).cuda()[None], num_pts).cpu().numpy()
+            if pcd.time is not None:
+                times = pcd.time[mask]
+            else:
+                times = None
+            xyz = pcd.points[mask]
+            rgb = pcd.colors[mask]
+            normals = pcd.normals[mask]
+            if times is not None:
+                time_mask = (times[:,0] < time_duration[1]) & (times[:,0] > time_duration[0])
+                xyz = xyz[time_mask]
+                rgb = rgb[time_mask]
+                normals = normals[time_mask]
+                times = times[time_mask]
+            pcd = BasicPointCloud(points=xyz, colors=rgb, normals=normals, time=times)
             
-        pcd = BasicPointCloud(points=xyz, 
-                              colors=rgb,
-                              normals=normals,
-                              time=times)
-        
+        if num_extra_pts > 0:
+            times = pcd.time
+            xyz = pcd.points
+            rgb = pcd.colors
+            normals = pcd.normals
+            bound_min, bound_max = xyz.min(0), xyz.max(0)
+            radius = 60.0 # (bound_max - bound_min).mean() + 10
+            phi = 2.0 * np.pi * np.random.rand(num_extra_pts)
+            theta = np.arccos(2.0 * np.random.rand(num_extra_pts) - 1.0)
+            x = radius * np.sin(theta) * np.cos(phi)
+            y = radius * np.sin(theta) * np.sin(phi)
+            z = radius * np.cos(theta)
+            xyz_extra = np.stack([x, y, z], axis=1)
+            normals_extra = np.zeros_like(xyz_extra)
+            rgb_extra = np.ones((num_extra_pts, 3)) / 2
+            
+            xyz = np.concatenate([xyz, xyz_extra], axis=0)
+            rgb = np.concatenate([rgb, rgb_extra], axis=0)
+            normals = np.concatenate([normals, normals_extra], axis=0)
+            
+            if times is not None:
+                times_extra = torch.zeros(((num_extra_pts, 3))) + (time_duration[0] + time_duration[1]) / 2
+                times = np.concatenate([times, times_extra], axis=0)
+                
+            pcd = BasicPointCloud(points=xyz, 
+                                colors=rgb,
+                                normals=normals,
+                                time=times)
+    else:
+        pcd = None
+        ply_path_origin = None
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,
-                           ply_path=ply_path)
+                           ply_path=ply_path_origin)
     return scene_info
 
 sceneLoadTypeCallbacks = {

@@ -220,20 +220,22 @@ def rotmat(a, b):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser() # TODO: refine it.
     parser.add_argument("path", default="", help="input path to the video")
+    parser.add_argument("frame_num", type=str, default="")
     args = parser.parse_args()
 
     # path must end with / to make sure image path is relative
     if args.path[-1] != '/':
         args.path += '/'
+    frame_num = args.frame_num
         
     # extract images
-    videos = [os.path.join(args.path, vname) for vname in os.listdir(args.path) if vname.endswith(".mp4")]
+    #videos = [os.path.join(args.path, vname) for vname in os.listdir(args.path) if vname.endswith(".mp4")]
     images_path = os.path.join(args.path, "images/")
-    os.makedirs(images_path, exist_ok=True)
+    #os.makedirs(images_path, exist_ok=True)
     
-    for video in videos:
-        cam_name = video.split('/')[-1].split('.')[-2]
-        do_system(f"ffmpeg -i {video} -start_number 0 {images_path}/{cam_name}_%04d.png")
+    # for video in videos:
+    #     cam_name = video.split('/')[-1].split('.')[-2]
+    #     do_system(f"ffmpeg -i {video} -start_number 0 {images_path}/{cam_name}_%04d.png")
         
     # load data
     images = [f[len(args.path):] for f in sorted(glob.glob(os.path.join(args.path, "images/", "*"))) if f.lower().endswith('png') or f.lower().endswith('jpg') or f.lower().endswith('jpeg')]
@@ -342,7 +344,7 @@ if __name__ == '__main__':
     with open(os.path.join(colmap_workspace, 'created/sparse/cameras.txt'), 'w') as f:
         f.write(f'1 PINHOLE {W} {H} {fx} {fy} {cx} {cy}')
         for frame in train_frames:
-            if frame['time'] == 0:
+            if frame['time'] >= (1 * int(frame_num, base=10))/30 - 1e-6 and frame['time'] <= (1 * int(frame_num, base=10))/30 + 1e-6:
                 fname = frame['file_path'].split('/')[-1] + '.png'
                 pose = np.array(frame['transform_matrix']) @ blender2opencv
                 fname2pose.update({fname: pose})
@@ -404,9 +406,9 @@ if __name__ == '__main__':
     
     do_system(f"colmap stereo_fusion    \
                 --workspace_path {os.path.join(colmap_workspace, 'dense')} \
-                --output_path {os.path.join(args.path, 'points3d.ply')}")
+                --output_path {os.path.join(args.path, 'points3d_' + frame_num + '.ply')}")
     
     shutil.rmtree(colmap_workspace)
-    os.remove(os.path.join(args.path, 'points3d.ply.vis'))
+    os.remove(os.path.join(args.path, 'points3d_' + frame_num + '.ply.vis'))
     
-    print(f"[INFO] Initial point cloud is saved in {os.path.join(args.path, 'points3d.ply')}.")
+    print(f"[INFO] Initial point cloud is saved in {os.path.join(args.path, 'points3d_' + frame_num + '.ply')}.")
