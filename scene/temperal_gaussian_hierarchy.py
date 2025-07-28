@@ -39,7 +39,7 @@ class TemperalGaussianHierarchy():
     def create_from_gaussians(self, gaussians : GaussianModel, opt, o_th : float = 0.05):
         mean_t, cov_t = gaussians.get_current_cov_and_mean_t()
         #o_th_cuda = torch.full((), o_th)
-        effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda"))) * torch.abs(cov_t)
+        effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda")) * cov_t)
         gaussians_start = torch.clamp(mean_t - effect_range, min=0)
         gaussians_end = torch.clamp(mean_t + effect_range, min= 0)
         #gaussians_last_level_ind = torch.zeros(gaussians_start.shape[0], device="cuda")
@@ -77,7 +77,7 @@ class TemperalGaussianHierarchy():
 
     def update_from_gaussians(self, gaussians : GaussianModel, opt, new_gaussians : GaussianModel, o_th : float = 0.05):
         mean_t, cov_t = gaussians.get_current_cov_and_mean_t()
-        effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda"))) * torch.abs(cov_t)
+        effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda")) * cov_t)
         gaussians_start = torch.clamp(mean_t - effect_range, min=0)
         gaussians_end = torch.clamp(mean_t + effect_range, min= 0)
         #gaussians_last_level_ind = torch.zeros(gaussians_start.shape[0], dtype=torch.int64, device = "cuda")
@@ -173,7 +173,7 @@ class TemperalGaussianHierarchy():
 
     def update_to_gaussians(self, gaussians : GaussianModel, opt, new_gaussians : GaussianModel, o_th : float = 0.05):
         mean_t, cov_t = gaussians.get_current_cov_and_mean_t()
-        effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda"))) * torch.abs(cov_t)
+        effect_range = torch.sqrt(-2 * torch.log(torch.tensor(o_th, device="cuda")) * cov_t)
         gaussians_start = torch.clamp(mean_t - effect_range, min=0)
         gaussians_end = torch.clamp(mean_t + effect_range, min= 0)
         #gaussians_last_level_ind = torch.zeros(gaussians_start.shape[0], dtype=torch.int64, device = "cuda")
