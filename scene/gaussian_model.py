@@ -280,6 +280,21 @@ class GaussianModel:
             #         state_content["exp_avg_sq"] = optimizer_state["exp_avg_sq"][mask].cpu()
             #         new_gaussians.opt_states[group["name"]] = state_content
 
+    def clone_to_layer(self, mask : torch.Tensor, gaussians : "GaussianModel", opt, new_gaussians : "GaussianModel"):
+            new_gaussians._xyz = gaussians._xyz[mask].cpu()
+            new_gaussians._features_dc = gaussians._features_dc[mask].cpu()
+            new_gaussians._features_rest = gaussians._features_rest[mask].cpu()
+            new_gaussians._scaling = gaussians._scaling[mask].cpu()
+            new_gaussians._rotation = gaussians._rotation[mask].cpu()
+            new_gaussians._opacity = gaussians._opacity[mask].cpu()
+            new_gaussians.max_radii2D = gaussians.max_radii2D[mask].cpu()
+            new_gaussians.xyz_gradient_accum = gaussians.xyz_gradient_accum[mask].cpu()
+            new_gaussians.t_gradient_accum = gaussians.t_gradient_accum[mask].cpu()
+            new_gaussians.denom = gaussians.denom[mask].cpu()
+            new_gaussians._t = gaussians._t[mask].cpu()
+            new_gaussians._scaling_t = gaussians._scaling_t[mask].cpu()
+            new_gaussians._rotation_r = gaussians._rotation_r[mask].cpu()
+
     def clone_from_cpu(self, gaussians_segments):
         xyz_list = []
         for segment in gaussians_segments:
@@ -604,7 +619,20 @@ class GaussianModel:
             #             #self.opt_states[group["name"]] = tgh_gaussian_state
             #         new_gaussians.opt_states[group["name"]] = state_content
 
-        
+    def append_to_layer(self, mask : torch.Tensor, gaussians : "GaussianModel", new_gaussians : "GaussianModel"):
+            new_gaussians._xyz = torch.cat([self._xyz, gaussians._xyz[mask].cpu()])
+            new_gaussians._features_dc = torch.cat([self._features_dc, gaussians._features_dc[mask].cpu()])
+            new_gaussians._features_rest = torch.cat([self._features_rest, gaussians._features_rest[mask].cpu()])
+            new_gaussians._scaling = torch.cat([self._scaling, gaussians._scaling[mask].cpu()])
+            new_gaussians._rotation = torch.cat([self._rotation, gaussians._rotation[mask].cpu()])
+            new_gaussians._opacity = torch.cat([self._opacity, gaussians._opacity[mask].cpu()])
+            new_gaussians.max_radii2D = torch.cat([self.max_radii2D, gaussians.max_radii2D[mask].cpu()])
+            new_gaussians.xyz_gradient_accum = torch.cat([self.xyz_gradient_accum, gaussians.xyz_gradient_accum[mask].cpu()])
+            new_gaussians.t_gradient_accum = torch.cat([self.t_gradient_accum, gaussians.t_gradient_accum[mask].cpu()])
+            new_gaussians.denom = torch.cat([self.denom, gaussians.denom[mask].cpu()])
+            new_gaussians._t = torch.cat([self._t, gaussians._t[mask].cpu()])
+            new_gaussians._scaling_t = torch.cat([self._scaling_t, gaussians._scaling_t[mask].cpu()])
+            new_gaussians._rotation_r = torch.cat([self._rotation_r, gaussians._rotation_r[mask].cpu()])
 
     def append_from_gaussians_cpu(self, gaussians : "GaussianModel"):
         self._xyz = nn.Parameter(torch.cat([self._xyz, gaussians._xyz.cuda()]))

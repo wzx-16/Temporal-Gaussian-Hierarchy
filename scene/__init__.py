@@ -83,7 +83,29 @@ class Scene:
             
         if args.loaded_pth:
             #self.gaussians.create_from_pth(args.loaded_pth, self.cameras_extent)
-            self.gaussians.restore(model_args=torch.load(args.loaded_pth, map_location="cuda:0")[0], training_args=None)
+            #self.gaussians.restore(model_args=torch.load(args.loaded_pth, map_location="cuda:0")[0], training_args=None)
+            (active_sh_degree, spatial_lr_scale, env_map, active_sh_degree_t) = self.tgh.restore(model_args=torch.load(args.loaded_pth, map_location="cpu")[0], training_args=None)
+            self.gaussians.active_sh_degree = active_sh_degree
+            # self._xyz, 
+            # self._features_dc, 
+            # self._features_rest,
+            # self._scaling, 
+            # self._rotation, 
+            # self._opacity,
+            # self.max_radii2D, 
+            # xyz_gradient_accum, 
+            # t_gradient_accum,
+            # denom,
+            # opt_dict, 
+            self.gaussians.spatial_lr_scale = spatial_lr_scale
+            # self._t,
+            # self._scaling_t,
+            # self._rotation_r,
+            self.gaussians.rot_4d = self.tgh.rot_4d
+            if env_map is not None:
+                self.gaussians.env_map = env_map.cuda()
+            self.gaussians.active_sh_degree_t = active_sh_degree_t
+
         else:
             if self.loaded_iter:
                 self.gaussians.load_ply(os.path.join(self.model_path,
