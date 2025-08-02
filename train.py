@@ -9,6 +9,7 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+from datetime import datetime
 import os
 import random
 import torch
@@ -29,6 +30,7 @@ from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from torch.utils.data import DataLoader
 import time
+from torchvision.utils import save_image
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -124,6 +126,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 #render_end = time.time()
                 #print(f"render time: {render_end - render_start:.6f} seconds")
                 image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+                # if iteration % 100 == 0:
+                #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                #     folder_path = "./training_images"
+                #     save_image(image, os.path.join(folder_path, "time_" + timestamp + "_pred.jpg"))
+                #     save_image(gt_image, os.path.join(folder_path, "time_" + timestamp + "_gt.jpg"))
                 depth = render_pkg["depth"]
                 alpha = render_pkg["alpha"]
                 #loss_start = time.time()
@@ -242,7 +249,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     if test_psnr >= best_psnr:
                         best_psnr = test_psnr
                         print("\n[ITER {}] Saving best checkpoint".format(iteration))
-                        torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt_best.pth")
+                        #torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt_best.pth")
                         torch.save((tgh.capture(gaussians, opt), iteration), scene.model_path + "/tgh_chkpnt_best.pth")
                         
                 if (iteration in saving_iterations):
